@@ -1,0 +1,1402 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>원내처방 약제비 관리</title>
+<style>
+  :root{
+    --surface:#fcfcfb;
+    --plane:#f9f9f7;
+    --ink:#0b0b0b;
+    --ink-2:#52514e;
+    --ink-muted:#898781;
+    --line:#e1e0d9;
+    --axis:#c3c2b7;
+    --brand:#2a78d6;
+    --brand-soft:#cde2fb;
+    --good:#0ca30c;
+    --warn:#fab219;
+    --crit:#d03b3b;
+    --radius:10px;
+    --shadow:0 1px 2px rgba(11,11,11,.06), 0 6px 20px rgba(11,11,11,.05);
+    color-scheme: light;
+  }
+  *{box-sizing:border-box}
+  /* 일반(직원) 계정에서 감출 요소 */
+  body.staff .staffHide{display:none !important}
+  /* 관리자 계정에서 감출 요소 (일반 계정 전용) */
+  body:not(.staff) .staffOnly{display:none !important}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--plane); color:var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    font-size:14px; line-height:1.5;
+  }
+  button, input, select, textarea{font:inherit; color:inherit}
+  button{cursor:pointer}
+  .hide{display:none !important}
+
+  /* ---------- login ---------- */
+  #loginView{
+    min-height:100%; display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .login-card{
+    width:100%; max-width:380px; background:var(--surface); border:1px solid var(--line);
+    border-radius:14px; padding:28px; box-shadow:var(--shadow);
+  }
+  .login-card h1{font-size:19px; margin:0 0 4px}
+  .login-card p.sub{margin:0 0 22px; color:var(--ink-2); font-size:13px}
+  .seg{display:flex; gap:6px; background:var(--plane); border:1px solid var(--line); padding:4px; border-radius:10px; margin-bottom:14px}
+  .seg button{
+    flex:1; border:0; background:transparent; padding:9px 0; border-radius:7px;
+    color:var(--ink-2); font-weight:600; font-size:13px;
+  }
+  .seg button[aria-pressed="true"]{background:var(--brand); color:#fff}
+  label.fl{display:block; font-size:12px; font-weight:600; color:var(--ink-2); margin:0 0 5px}
+  .inp{
+    width:100%; padding:10px 12px; border:1px solid var(--axis); border-radius:8px;
+    background:#fff; outline:none;
+  }
+  .inp:focus{border-color:var(--brand); box-shadow:0 0 0 3px var(--brand-soft)}
+  .btn{
+    border:1px solid var(--axis); background:#fff; padding:9px 14px; border-radius:8px; font-weight:600;
+  }
+  .btn:hover{background:var(--plane)}
+  .btn-primary{background:var(--brand); border-color:var(--brand); color:#fff}
+  .btn-primary:hover{background:#256abf}
+  .btn-ghost{border-color:transparent; background:transparent; color:var(--ink-2)}
+  .btn-danger{color:var(--crit); border-color:var(--line)}
+  .btn-sm{padding:5px 9px; font-size:12px; border-radius:6px}
+  .msg{margin-top:12px; font-size:13px; min-height:19px}
+  .msg.err{color:var(--crit)}
+  .msg.ok{color:var(--good)}
+
+  /* ---------- shell ---------- */
+  header.top{
+    background:var(--surface); border-bottom:1px solid var(--line);
+    position:sticky; top:0; z-index:20;
+  }
+  .top-in{max-width:1180px; margin:0 auto; padding:12px 20px; display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+  .brand{font-weight:700; font-size:15px; margin-right:auto}
+  .who{font-size:12px; color:var(--ink-2)}
+  .badge{
+    display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700;
+    background:var(--brand-soft); color:#184f95;
+  }
+  .badge.admin{background:#ffe9c9; color:#7a4c00}
+  nav.tabs{max-width:1180px; margin:0 auto; padding:0 20px; display:flex; gap:2px; overflow-x:auto}
+  nav.tabs button{
+    border:0; background:transparent; padding:11px 14px; font-weight:600; color:var(--ink-2);
+    border-bottom:2px solid transparent; white-space:nowrap;
+  }
+  nav.tabs button[aria-selected="true"]{color:var(--brand); border-bottom-color:var(--brand)}
+  main{max-width:1180px; margin:0 auto; padding:22px 20px 80px}
+  .card{
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+    padding:18px; margin-bottom:18px;
+  }
+  .card h2{font-size:15px; margin:0 0 2px}
+  .card p.hint{margin:0 0 16px; font-size:12.5px; color:var(--ink-2)}
+  .row{display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end}
+  .row > div{flex:1 1 150px; min-width:0}
+  .row .grow2{flex:2 1 260px}
+  .actions{display:flex; gap:8px; flex-wrap:wrap; margin-top:14px}
+
+  /* ---------- table ---------- */
+  .tbl-wrap{overflow-x:auto; border:1px solid var(--line); border-radius:8px; background:#fff}
+  table{border-collapse:collapse; width:100%; font-size:13px}
+  th,td{padding:9px 11px; text-align:left; border-bottom:1px solid var(--line); white-space:nowrap}
+  th{background:var(--plane); font-size:12px; color:var(--ink-2); font-weight:700; position:sticky; top:0}
+  tbody tr:last-child td{border-bottom:0}
+  tbody tr:hover{background:#f7f9fd}
+  td.num, th.num{text-align:right; font-variant-numeric:tabular-nums}
+  .empty{padding:26px; text-align:center; color:var(--ink-muted); font-size:13px}
+  .pill{display:inline-block; padding:1px 7px; border-radius:999px; font-size:11px; font-weight:700}
+  .pill.low{background:#fdecec; color:#a02020}
+  .pill.zero{background:#f3d6d6; color:#7a1414}
+
+  /* ---------- stat tiles ---------- */
+  .tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:18px}
+  .tile{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px}
+  .tile .k{font-size:12px; color:var(--ink-2); font-weight:600}
+  .tile .v{font-size:24px; font-weight:700; margin-top:4px; letter-spacing:-.02em}
+  .tile .u{font-size:13px; font-weight:600; color:var(--ink-2); margin-left:2px}
+
+  /* ---------- charts ---------- */
+  .chart{position:relative}
+  .chart svg{display:block; width:100%; height:auto; overflow:visible}
+  .tip{
+    position:absolute; pointer-events:none; background:#0b0b0b; color:#fff; padding:7px 10px;
+    border-radius:7px; font-size:12px; line-height:1.45; white-space:nowrap; opacity:0;
+    transition:opacity .1s; transform:translate(-50%,-115%); z-index:5;
+  }
+  .tip b{font-weight:700}
+  .bar-list{display:flex; flex-direction:column; gap:9px}
+  .bar-row{display:grid; grid-template-columns:1fr; gap:3px}
+  .bar-row .lab{display:flex; justify-content:space-between; gap:12px; font-size:12.5px}
+  .bar-row .lab .nm{color:var(--ink); font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .bar-row .lab .vl{color:var(--ink-2); font-variant-numeric:tabular-nums; white-space:nowrap}
+  .bar-track{height:9px; background:var(--plane); border-radius:5px; overflow:hidden}
+  .bar-fill{height:100%; background:var(--brand); border-radius:0 5px 5px 0}
+
+  /* ---------- modal ---------- */
+  .backdrop{
+    position:fixed; inset:0; background:rgba(11,11,11,.4); display:flex; align-items:center;
+    justify-content:center; padding:20px; z-index:50;
+  }
+  .modal{background:var(--surface); border-radius:14px; padding:22px; width:100%; max-width:520px; box-shadow:var(--shadow); max-height:90vh; overflow:auto}
+  .modal h3{margin:0 0 16px; font-size:16px}
+
+  .toast{
+    position:fixed; left:50%; bottom:26px; transform:translateX(-50%);
+    background:#0b0b0b; color:#fff; padding:11px 18px; border-radius:9px; font-size:13px;
+    z-index:80; box-shadow:var(--shadow);
+  }
+  .note{
+    background:#fff8e6; border:1px solid #f5e3b8; color:#6b5200; border-radius:8px;
+    padding:10px 12px; font-size:12.5px; margin-bottom:14px;
+  }
+  @media (max-width:600px){
+    th,td{padding:8px}
+    main{padding:16px 12px 60px}
+    .top-in{padding:10px 12px}
+    nav.tabs{padding:0 8px}
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ 로그인 ============ -->
+<div id="loginView">
+  <form class="login-card" id="loginForm">
+    <h1>원내처방 약제비 관리</h1>
+    <p class="sub">접속 권한을 선택하고 비밀번호를 입력해 주세요.</p>
+    <div class="seg" id="roleSeg">
+      <button type="button" data-role="staff" aria-pressed="true">일반</button>
+      <button type="button" data-role="admin" aria-pressed="false">관리자</button>
+    </div>
+    <label class="fl" for="pw">비밀번호</label>
+    <input class="inp" type="password" id="pw" autocomplete="current-password" required>
+    <div style="margin-top:14px">
+      <button class="btn btn-primary" style="width:100%" type="submit" id="loginBtn">접속</button>
+    </div>
+    <div class="msg" id="loginMsg"></div>
+  </form>
+</div>
+
+<!-- ============ 앱 ============ -->
+<div id="appView" class="hide">
+  <header class="top">
+    <div class="top-in">
+      <span class="brand">원내처방 약제비 관리</span>
+      <span class="who" id="whoami"></span>
+      <button class="btn btn-sm" id="logoutBtn">로그아웃</button>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button data-tab="dispense" aria-selected="true">판매 입력</button>
+      <button data-tab="stockin" aria-selected="false">입고</button>
+      <button data-tab="drugs" aria-selected="false">약품 · 재고</button>
+      <button data-tab="stats" aria-selected="false" class="staffHide">기간별 집계</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ---------- 투약 입력 ---------- -->
+    <section id="tab-dispense">
+      <div class="card">
+        <h2>판매 등록</h2>
+        <p class="hint">약품과 수량을 넣고 저장하면 재고에서 그만큼 빠집니다.</p>
+        <div class="row">
+          <div style="flex:0 1 150px">
+            <label class="fl" for="dpDate">판매일</label>
+            <input class="inp" type="date" id="dpDate">
+          </div>
+          <div style="flex:0 1 150px">
+            <label class="fl" for="dpName">환자명</label>
+            <input class="inp" id="dpName" placeholder="예: 홍길동">
+          </div>
+          <div style="flex:0 1 130px">
+            <label class="fl" for="dpPhone">전화 뒷 4자리 <span style="font-weight:400">(선택)</span></label>
+            <input class="inp" type="tel" id="dpPhone" inputmode="numeric" placeholder="0000" style="letter-spacing:.08em">
+          </div>
+          <div style="flex:0 1 140px">
+            <label class="fl" for="dpPay">결제수단</label>
+            <select class="inp" id="dpPay">
+              <option value="카드">카드결제</option>
+              <option value="현금">현금</option>
+              <option value="계좌이체">계좌이체</option>
+              <option value="기타">기타</option>
+            </select>
+          </div>
+          <div style="flex:0 1 150px" id="dpCardWrap">
+            <label class="fl" for="dpCard">카드사</label>
+            <select class="inp" id="dpCard">
+              <option value="">— 선택 —</option>
+              <option>신한</option><option>삼성</option><option>현대</option>
+              <option>KB국민</option><option>롯데</option><option>하나</option>
+              <option>우리</option><option>BC</option><option>NH농협</option>
+              <option>씨티</option><option>카카오뱅크</option><option>토스뱅크</option>
+              <option>기타</option>
+            </select>
+          </div>
+          <div style="flex:1 1 160px">
+            <label class="fl" for="dpMemo">메모 <span style="font-weight:400">(선택)</span></label>
+            <input class="inp" id="dpMemo">
+          </div>
+        </div>
+
+        <div class="tbl-wrap" style="margin-top:16px">
+          <table>
+            <thead>
+              <tr>
+                <th style="min-width:230px">약품</th>
+                <th class="num" style="width:90px">수량</th>
+                <th class="num staffHide" style="width:120px">판매단가</th>
+                <th class="num" style="width:120px">금액</th>
+                <th style="width:44px"></th>
+              </tr>
+            </thead>
+            <tbody id="dpItems"></tbody>
+            <tfoot>
+              <tr>
+                <td colspan="2" style="text-align:right; font-weight:700">합계</td>
+                <td class="staffHide"></td>
+                <td class="num" id="dpTotal" style="font-weight:700">0</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <div class="actions">
+          <button class="btn btn-sm" id="dpAddRow">+ 약품 줄 추가</button>
+          <span style="flex:1"></span>
+          <button class="btn" id="dpReset">초기화</button>
+          <button class="btn btn-primary" id="dpSave">저장</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>판매 내역</h2>
+        <p class="hint" id="dpListHint">기간을 지정해 조회합니다.</p>
+        <div class="row">
+          <div style="flex:0 1 160px" class="staffOnly">
+            <label class="fl" for="dpDay">조회할 날짜</label>
+            <input class="inp" type="date" id="dpDay">
+          </div>
+          <div style="flex:0 1 150px" class="staffHide">
+            <label class="fl" for="dpFrom">시작일</label>
+            <input class="inp" type="date" id="dpFrom">
+          </div>
+          <div style="flex:0 1 150px" class="staffHide">
+            <label class="fl" for="dpTo">종료일</label>
+            <input class="inp" type="date" id="dpTo">
+          </div>
+          <div style="flex:0 0 auto">
+            <button class="btn btn-primary" id="dpSearch">조회</button>
+          </div>
+          <div style="flex:0 0 auto">
+            <button class="btn" id="dpToday">오늘</button>
+          </div>
+        </div>
+        <div class="tbl-wrap" style="margin-top:14px">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:105px">판매일</th>
+                <th style="width:90px">환자명</th>
+                <th style="width:100px">전화 뒷4자리</th>
+                <th style="min-width:230px">판매 내역</th>
+                <th style="width:110px">결제</th>
+                <th class="num" style="width:110px">금액</th>
+                <th style="width:60px"></th>
+              </tr>
+            </thead>
+            <tbody id="dpList"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- 입고 ---------- -->
+    <section id="tab-stockin" class="hide">
+      <div class="card">
+        <h2>입고 등록</h2>
+        <p class="hint">약품과 들어온 수량을 넣고 저장하면 재고가 그만큼 늘어납니다.</p>
+        <div class="row">
+          <div style="flex:0 1 150px">
+            <label class="fl" for="siDate">입고일</label>
+            <input class="inp" type="date" id="siDate">
+          </div>
+          <div class="grow2">
+            <label class="fl" for="siDrug">약품</label>
+            <select class="inp" id="siDrug"></select>
+          </div>
+          <div style="flex:0 1 110px">
+            <label class="fl" for="siQty">수량</label>
+            <input class="inp num" type="number" id="siQty" min="1" step="1" value="1" style="text-align:right">
+          </div>
+          <div style="flex:0 1 130px" class="staffHide">
+            <label class="fl" for="siCost">매입단가</label>
+            <input class="inp" type="number" id="siCost" min="0" step="1" style="text-align:right">
+          </div>
+          <div style="flex:0 1 150px">
+            <label class="fl" for="siVendor">거래처 <span style="font-weight:400">(선택)</span></label>
+            <input class="inp" id="siVendor">
+          </div>
+        </div>
+        <div class="actions">
+          <span style="flex:1"></span>
+          <button class="btn btn-primary" id="siSave">입고 저장</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>입고 내역</h2>
+        <div class="row">
+          <div style="flex:0 1 150px">
+            <label class="fl" for="siFrom">시작일</label>
+            <input class="inp" type="date" id="siFrom">
+          </div>
+          <div style="flex:0 1 150px">
+            <label class="fl" for="siTo">종료일</label>
+            <input class="inp" type="date" id="siTo">
+          </div>
+          <div style="flex:0 0 auto"><button class="btn btn-primary" id="siSearch">조회</button></div>
+        </div>
+        <div class="tbl-wrap" style="margin-top:14px">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:105px">입고일</th>
+                <th style="min-width:220px">약품</th>
+                <th class="num" style="width:80px">수량</th>
+                <th class="num staffHide" style="width:110px">매입단가</th>
+                <th class="num staffHide" style="width:120px">매입금액</th>
+                <th style="width:130px">거래처</th>
+                <th style="width:60px"></th>
+              </tr>
+            </thead>
+            <tbody id="siList"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- 약품 ---------- -->
+    <section id="tab-drugs" class="hide">
+      <div class="card">
+        <div style="display:flex; align-items:flex-start; gap:12px; flex-wrap:wrap">
+          <div style="flex:1 1 240px">
+            <h2>약품 · 재고</h2>
+            <p class="hint" id="drugHint">약품 목록과 현재고입니다.</p>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center">
+            <input class="inp" id="drugSearch" placeholder="약품명 검색" style="width:180px">
+            <button class="btn btn-primary adminOnly" id="drugAdd">+ 약품 등록</button>
+          </div>
+        </div>
+        <div id="lowStockNote" class="note hide"></div>
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="min-width:180px">약품명</th>
+                <th style="width:110px">규격</th>
+                <th style="width:70px">단위</th>
+                <th class="num staffHide" style="width:100px">매입단가</th>
+                <th class="num" style="width:100px">판매단가</th>
+                <th class="num" style="width:90px">현재고</th>
+                <th class="num" style="width:90px">안전재고</th>
+                <th style="width:120px" class="adminOnly"></th>
+              </tr>
+            </thead>
+            <tbody id="drugList"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- 통계 ---------- -->
+    <section id="tab-stats" class="hide">
+      <div class="card">
+        <h2>기간별 약제비 집계</h2>
+        <p class="hint">투약 내역을 기준으로 계산합니다.</p>
+        <div class="row">
+          <div style="flex:0 1 150px">
+            <label class="fl" for="stFrom">시작일</label>
+            <input class="inp" type="date" id="stFrom">
+          </div>
+          <div style="flex:0 1 150px">
+            <label class="fl" for="stTo">종료일</label>
+            <input class="inp" type="date" id="stTo">
+          </div>
+          <div style="flex:0 0 auto"><button class="btn btn-primary" id="stSearch">집계</button></div>
+          <div style="flex:0 0 auto"><button class="btn btn-sm" data-preset="thisMonth">이번 달</button></div>
+          <div style="flex:0 0 auto"><button class="btn btn-sm" data-preset="lastMonth">지난 달</button></div>
+          <div style="flex:0 0 auto"><button class="btn btn-sm" data-preset="last30">최근 30일</button></div>
+          <div style="flex:1"></div>
+          <div style="flex:0 0 auto"><button class="btn" id="stCsv">CSV 내보내기</button></div>
+        </div>
+      </div>
+
+      <div class="tiles" id="stTiles"></div>
+
+      <div class="card">
+        <h2>결제수단별 집계</h2>
+        <p class="hint">건수와 금액입니다.</p>
+        <div class="bar-list" id="stPay"></div>
+        <div id="stCard" style="margin-top:14px; font-size:12.5px; color:var(--ink-2)"></div>
+      </div>
+
+      <div class="card">
+        <h2>일별 약제비 추이</h2>
+        <p class="hint" id="stTrendHint"></p>
+        <div class="chart" id="trendChart"><div class="tip" id="trendTip"></div></div>
+      </div>
+
+      <div class="card">
+        <h2>약품별 사용 집계</h2>
+        <p class="hint">사용 수량이 많은 순서입니다.</p>
+        <div class="bar-list" id="stRank" style="margin-bottom:16px"></div>
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="min-width:200px">약품명</th>
+                <th class="num" style="width:90px">수량</th>
+                <th class="num" style="width:120px">약제비</th>
+                <th class="num" style="width:120px">매입원가</th>
+                <th class="num" style="width:110px">차액</th>
+              </tr>
+            </thead>
+            <tbody id="stTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="modalRoot"></div>
+
+<script type="module">
+/* ==========================================================================
+   1) 설정 — 여기 두 블록만 본인 값으로 바꾸면 됩니다
+   ========================================================================== */
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDntjTBOiMRu1jEkWUwhSRZmlu1rIOCWvg",
+  authDomain: "abijou-medicine.firebaseapp.com",
+  projectId: "abijou-medicine",
+  storageBucket: "abijou-medicine.firebasestorage.app",
+  messagingSenderId: "206992233209",
+  appId: "1:206992233209:web:2cadd9e6a2211e511c0828",
+  measurementId: "G-W8DRWBB7FW"
+};
+
+// Firebase Authentication > 이메일/비밀번호 로 미리 만들어 둔 계정 2개.
+// 사용자는 비밀번호만 입력하고, 아래 이메일은 코드가 자동으로 사용합니다.
+const ACCOUNTS = {
+  staff: "staff@abijou-guro.com",   // 일반
+  admin: "abijou_guro@nate.com"     // 관리자
+};
+
+/* ==========================================================================
+   2) Firebase 초기화
+   ========================================================================== */
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
+import {
+  getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged,
+  setPersistence, browserLocalPersistence
+} from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
+import {
+  getFirestore, collection, doc, getDocs, setDoc, deleteDoc, updateDoc,
+  query, where, orderBy, onSnapshot, writeBatch, increment, serverTimestamp, limit
+} from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
+
+const app  = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db   = getFirestore(app);
+
+const COL = {
+  drugs:     collection(db, "drugs"),
+  dispenses: collection(db, "dispenses"),
+  stockIns:  collection(db, "stockIns")
+};
+
+/* ==========================================================================
+   3) 공용 유틸
+   ========================================================================== */
+
+const $  = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const won = n => (Number(n) || 0).toLocaleString("ko-KR");
+const num = n => (Number(n) || 0).toLocaleString("ko-KR");
+
+function ymd(d = new Date()) {
+  const t = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return t.toISOString().slice(0, 10);
+}
+function addDays(dateStr, n) {
+  const d = new Date(dateStr + "T00:00:00");
+  d.setDate(d.getDate() + n);
+  return ymd(d);
+}
+function monthStart(d = new Date()) { return ymd(new Date(d.getFullYear(), d.getMonth(), 1)); }
+function monthEnd(d = new Date())   { return ymd(new Date(d.getFullYear(), d.getMonth() + 1, 0)); }
+
+let toastTimer;
+function toast(text) {
+  clearTimeout(toastTimer);
+  let el = $(".toast");
+  if (!el) { el = document.createElement("div"); el.className = "toast"; document.body.appendChild(el); }
+  el.textContent = text;
+  toastTimer = setTimeout(() => el.remove(), 2600);
+}
+
+function payLabel(r) {
+  const p = r.pay || "";
+  if (!p) return "";
+  return p === "카드" ? "카드" + (r.card ? " · " + r.card : "") : p;
+}
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function confirmModal(title, body, okLabel = "확인") {
+  return new Promise(resolve => {
+    const root = $("#modalRoot");
+    root.innerHTML = `
+      <div class="backdrop">
+        <div class="modal" style="max-width:420px">
+          <h3>${escapeHtml(title)}</h3>
+          <p style="margin:0 0 20px; color:var(--ink-2); font-size:13.5px">${escapeHtml(body)}</p>
+          <div style="display:flex; gap:8px; justify-content:flex-end">
+            <button class="btn" data-x="no">취소</button>
+            <button class="btn btn-danger" data-x="yes">${escapeHtml(okLabel)}</button>
+          </div>
+        </div>
+      </div>`;
+    root.onclick = e => {
+      const x = e.target.dataset.x;
+      if (!x) return;
+      root.innerHTML = "";
+      resolve(x === "yes");
+    };
+  });
+}
+
+/* ==========================================================================
+   4) 로그인
+   ========================================================================== */
+
+let role = "staff";           // 'staff' | 'admin'
+let selectedRole = "staff";
+let currentUser = null;
+
+$("#roleSeg").addEventListener("click", e => {
+  const b = e.target.closest("button[data-role]");
+  if (!b) return;
+  selectedRole = b.dataset.role;
+  $$("#roleSeg button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+});
+
+$("#loginForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const msg = $("#loginMsg");
+  const btn = $("#loginBtn");
+  msg.className = "msg";
+  msg.textContent = "";
+  btn.disabled = true;
+  btn.textContent = "확인 중…";
+  try {
+    await setPersistence(auth, browserLocalPersistence);
+    await signInWithEmailAndPassword(auth, ACCOUNTS[selectedRole], $("#pw").value);
+  } catch (err) {
+    const code = err?.code || "";
+    msg.className = "msg err";
+    msg.textContent =
+      code.includes("invalid-credential") || code.includes("wrong-password") || code.includes("user-not-found")
+        ? "비밀번호가 맞지 않습니다."
+        : code.includes("too-many-requests")
+        ? "시도가 너무 많습니다. 잠시 후 다시 해주세요."
+        : code.includes("network")
+        ? "네트워크 연결을 확인해 주세요."
+        : "접속에 실패했습니다. (" + code + ")";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "접속";
+  }
+});
+
+$("#logoutBtn").addEventListener("click", () => signOut(auth));
+
+onAuthStateChanged(auth, user => {
+  currentUser = user;
+  if (!user) {
+    $("#loginView").classList.remove("hide");
+    $("#appView").classList.add("hide");
+    $("#pw").value = "";
+    teardown();
+    return;
+  }
+  role = (user.email || "").toLowerCase() === ACCOUNTS.admin.toLowerCase() ? "admin" : "staff";
+  $("#loginView").classList.add("hide");
+  $("#appView").classList.remove("hide");
+  $("#whoami").innerHTML = role === "admin"
+    ? '<span class="badge admin">관리자</span>'
+    : '<span class="badge">일반</span>';
+  document.body.classList.toggle("staff", role !== "admin");
+  $$(".adminOnly").forEach(el => el.classList.toggle("hide", role !== "admin"));
+  $("#dpListHint").textContent = role === "admin"
+    ? "기간을 지정해 조회합니다."
+    : "하루 단위로 조회합니다. 날짜를 바꾸면 그날 내역이 나옵니다.";
+  $("#drugHint").textContent = role === "admin"
+    ? "약품 목록과 현재고입니다. 등록 · 수정 · 삭제가 가능합니다."
+    : "약품 목록과 현재고입니다. 등록 · 수정은 관리자만 할 수 있습니다.";
+  boot();
+});
+
+/* ==========================================================================
+   5) 탭
+   ========================================================================== */
+
+$("#tabs").addEventListener("click", e => {
+  const b = e.target.closest("button[data-tab]");
+  if (!b) return;
+  $$("#tabs button").forEach(x => x.setAttribute("aria-selected", String(x === b)));
+  ["dispense", "stockin", "drugs", "stats"].forEach(t =>
+    $("#tab-" + t).classList.toggle("hide", t !== b.dataset.tab));
+});
+
+/* ==========================================================================
+   6) 약품 마스터 (실시간 구독)
+   ========================================================================== */
+
+let drugs = [];            // [{id, name, spec, unit, buyPrice, sellPrice, stock, safety, memo}]
+let unsubDrugs = null;
+
+function teardown() {
+  if (unsubDrugs) { unsubDrugs(); unsubDrugs = null; }
+  drugs = [];
+}
+
+function boot() {
+  const today = ymd();
+  $("#dpDate").value = today;
+  $("#siDate").value = today;
+  $("#dpDay").value = today;
+  $("#dpFrom").value = today; $("#dpTo").value = today;
+  $("#siFrom").value = monthStart(); $("#siTo").value = monthEnd();
+  $("#stFrom").value = monthStart(); $("#stTo").value = monthEnd();
+
+  if (unsubDrugs) unsubDrugs();
+  unsubDrugs = onSnapshot(query(COL.drugs, orderBy("name")), snap => {
+    drugs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderDrugs();
+    refreshDrugSelects();
+  }, err => toast("약품 목록을 불러오지 못했습니다: " + err.code));
+
+  syncPayFields();
+  if (!$("#dpItems").children.length) addDispenseRow();
+  loadDispenses();
+}
+
+function drugById(id) { return drugs.find(d => d.id === id); }
+
+function drugOptions(selectedId) {
+  return '<option value="">— 약품 선택 —</option>' + drugs.map(d =>
+    `<option value="${d.id}"${d.id === selectedId ? " selected" : ""}>${escapeHtml(d.name)}${d.spec ? " · " + escapeHtml(d.spec) : ""}</option>`
+  ).join("");
+}
+
+function refreshDrugSelects() {
+  const si = $("#siDrug");
+  const keep = si.value;
+  si.innerHTML = drugOptions(keep);
+  $$("#dpItems select.drugSel").forEach(sel => {
+    const k = sel.value;
+    sel.innerHTML = drugOptions(k);
+  });
+}
+
+function renderDrugs() {
+  const kw = $("#drugSearch").value.trim().toLowerCase();
+  const list = drugs.filter(d => !kw || (d.name || "").toLowerCase().includes(kw));
+  const tb = $("#drugList");
+
+  if (!list.length) {
+    tb.innerHTML = `<tr><td colspan="8"><div class="empty">${drugs.length ? "검색 결과가 없습니다." : "등록된 약품이 없습니다. 관리자로 접속해 약품을 먼저 등록해 주세요."}</div></td></tr>`;
+  } else {
+    tb.innerHTML = list.map(d => {
+      const stock = Number(d.stock) || 0;
+      const safety = Number(d.safety) || 0;
+      const flag = stock <= 0 ? '<span class="pill zero">소진</span>'
+                 : (safety > 0 && stock <= safety) ? '<span class="pill low">부족</span>' : "";
+      return `<tr>
+        <td>${escapeHtml(d.name)}</td>
+        <td>${escapeHtml(d.spec || "")}</td>
+        <td>${escapeHtml(d.unit || "")}</td>
+        <td class="num staffHide">${won(d.buyPrice)}</td>
+        <td class="num">${won(d.sellPrice)}</td>
+        <td class="num">${num(stock)} ${flag}</td>
+        <td class="num">${safety ? num(safety) : "—"}</td>
+        <td class="adminOnly${role === "admin" ? "" : " hide"}">
+          <button class="btn btn-sm" data-edit="${d.id}">수정</button>
+          <button class="btn btn-sm btn-danger" data-del="${d.id}">삭제</button>
+        </td>
+      </tr>`;
+    }).join("");
+  }
+
+  const low = drugs.filter(d => {
+    const s = Number(d.stock) || 0, sf = Number(d.safety) || 0;
+    return s <= 0 || (sf > 0 && s <= sf);
+  });
+  const note = $("#lowStockNote");
+  if (low.length) {
+    note.classList.remove("hide");
+    note.innerHTML = `재고를 확인해 주세요 — ${low.map(d =>
+      `<b>${escapeHtml(d.name)}</b> ${num(d.stock || 0)}${escapeHtml(d.unit || "")}`).join(" · ")}`;
+  } else {
+    note.classList.add("hide");
+  }
+}
+
+$("#drugSearch").addEventListener("input", renderDrugs);
+
+$("#drugList").addEventListener("click", async e => {
+  const ed = e.target.closest("[data-edit]");
+  const dl = e.target.closest("[data-del]");
+  if (ed) return openDrugModal(drugById(ed.dataset.edit));
+  if (dl) {
+    const d = drugById(dl.dataset.del);
+    if (!d) return;
+    const ok = await confirmModal("약품 삭제", `'${d.name}'을 삭제합니다. 이미 저장된 투약·입고 내역은 그대로 남습니다.`, "삭제");
+    if (!ok) return;
+    try {
+      await deleteDoc(doc(db, "drugs", d.id));
+      toast("삭제했습니다.");
+    } catch (err) { toast("삭제 실패: " + err.code); }
+  }
+});
+
+$("#drugAdd").addEventListener("click", () => openDrugModal(null));
+
+function openDrugModal(d) {
+  const isNew = !d;
+  const root = $("#modalRoot");
+  root.innerHTML = `
+    <div class="backdrop">
+      <form class="modal" id="drugForm">
+        <h3>${isNew ? "약품 등록" : "약품 수정"}</h3>
+        <div class="row">
+          <div style="flex:1 1 100%">
+            <label class="fl">약품명</label>
+            <input class="inp" name="name" required value="${escapeHtml(d?.name || "")}">
+          </div>
+          <div><label class="fl">규격</label><input class="inp" name="spec" placeholder="예: 500mg" value="${escapeHtml(d?.spec || "")}"></div>
+          <div><label class="fl">단위</label><input class="inp" name="unit" placeholder="예: 정, 앰플, ml" value="${escapeHtml(d?.unit || "")}"></div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <div><label class="fl">매입단가</label><input class="inp" type="number" name="buyPrice" min="0" step="1" style="text-align:right" value="${Number(d?.buyPrice) || 0}"></div>
+          <div><label class="fl">판매단가</label><input class="inp" type="number" name="sellPrice" min="0" step="1" style="text-align:right" value="${Number(d?.sellPrice) || 0}"></div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <div><label class="fl">${isNew ? "초기 재고" : "현재고 (직접 보정)"}</label><input class="inp" type="number" name="stock" step="1" style="text-align:right" value="${Number(d?.stock) || 0}"></div>
+          <div><label class="fl">안전재고</label><input class="inp" type="number" name="safety" min="0" step="1" style="text-align:right" value="${Number(d?.safety) || 0}"></div>
+        </div>
+        <div style="margin-top:10px">
+          <label class="fl">메모</label>
+          <input class="inp" name="memo" value="${escapeHtml(d?.memo || "")}">
+        </div>
+        <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:20px">
+          <button type="button" class="btn" data-close="1">취소</button>
+          <button type="submit" class="btn btn-primary">저장</button>
+        </div>
+        <div class="msg" id="drugMsg"></div>
+      </form>
+    </div>`;
+
+  root.querySelector("[data-close]").onclick = () => (root.innerHTML = "");
+
+  $("#drugForm").onsubmit = async ev => {
+    ev.preventDefault();
+    const f = new FormData(ev.target);
+    const payload = {
+      name: (f.get("name") || "").trim(),
+      spec: (f.get("spec") || "").trim(),
+      unit: (f.get("unit") || "").trim(),
+      buyPrice: Number(f.get("buyPrice")) || 0,
+      sellPrice: Number(f.get("sellPrice")) || 0,
+      stock: Number(f.get("stock")) || 0,
+      safety: Number(f.get("safety")) || 0,
+      memo: (f.get("memo") || "").trim(),
+      updatedAt: serverTimestamp()
+    };
+    if (!payload.name) return;
+    try {
+      if (isNew) {
+        payload.createdAt = serverTimestamp();
+        await setDoc(doc(COL.drugs), payload);
+      } else {
+        await updateDoc(doc(db, "drugs", d.id), payload);
+      }
+      root.innerHTML = "";
+      toast("저장했습니다.");
+    } catch (err) {
+      const m = $("#drugMsg");
+      m.className = "msg err";
+      m.textContent = "저장 실패: " + (err.code || err.message);
+    }
+  };
+}
+
+/* ==========================================================================
+   7) 투약 입력
+   ========================================================================== */
+
+function addDispenseRow(preset) {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td><select class="inp drugSel">${drugOptions(preset?.drugId)}</select></td>
+    <td><input class="inp qty" type="number" min="1" step="1" value="${preset?.qty || 1}" style="text-align:right"></td>
+    <td class="staffHide"><input class="inp price" type="number" min="0" step="1" value="${preset?.price || 0}" style="text-align:right"></td>
+    <td class="num amt">0</td>
+    <td><button class="btn btn-sm btn-ghost rm" title="줄 삭제">✕</button></td>`;
+  $("#dpItems").appendChild(tr);
+  recalcDispense();
+}
+
+$("#dpAddRow").addEventListener("click", () => addDispenseRow());
+
+$("#dpItems").addEventListener("input", e => {
+  if (e.target.classList.contains("drugSel")) {
+    const d = drugById(e.target.value);
+    const tr = e.target.closest("tr");
+    if (d) tr.querySelector(".price").value = Number(d.sellPrice) || 0;
+  }
+  recalcDispense();
+});
+
+$("#dpItems").addEventListener("click", e => {
+  if (!e.target.classList.contains("rm")) return;
+  const rows = $("#dpItems").children.length;
+  e.target.closest("tr").remove();
+  if (rows <= 1) addDispenseRow();
+  recalcDispense();
+});
+
+function recalcDispense() {
+  let total = 0;
+  $$("#dpItems tr").forEach(tr => {
+    const qty = Number(tr.querySelector(".qty").value) || 0;
+    const price = Number(tr.querySelector(".price").value) || 0;
+    const amt = qty * price;
+    tr.querySelector(".amt").textContent = won(amt);
+    total += amt;
+  });
+  $("#dpTotal").textContent = won(total);
+  return total;
+}
+
+function syncPayFields() {
+  $("#dpCardWrap").style.display = $("#dpPay").value === "카드" ? "" : "none";
+  if ($("#dpPay").value !== "카드") $("#dpCard").value = "";
+}
+$("#dpPay").addEventListener("change", syncPayFields);
+
+// 전화 뒷 4자리 — 숫자만. 전체 번호를 붙여넣으면 뒤 4자리만 남긴다.
+$("#dpPhone").addEventListener("input", e => {
+  const d = e.target.value.replace(/\D/g, "");
+  e.target.value = d.length >= 8 ? d.slice(-4) : d.slice(0, 4);
+});
+
+$("#dpReset").addEventListener("click", () => {
+  $("#dpName").value = ""; $("#dpPhone").value = ""; $("#dpMemo").value = "";
+  $("#dpPay").value = "카드"; $("#dpCard").value = "";
+  syncPayFields();
+  $("#dpItems").innerHTML = "";
+  addDispenseRow();
+});
+
+$("#dpSave").addEventListener("click", async () => {
+  const date = $("#dpDate").value;
+  const patient = $("#dpName").value.trim();
+  const pay = $("#dpPay").value;
+  const card = pay === "카드" ? $("#dpCard").value : "";
+  if (!date) return toast("판매일을 선택해 주세요.");
+  if (!patient) return toast("환자명을 입력해 주세요.");
+  if (pay === "카드" && !card) return toast("카드사를 선택해 주세요.");
+
+  const items = [];
+  for (const tr of $$("#dpItems tr")) {
+    const id = tr.querySelector(".drugSel").value;
+    const qty = Number(tr.querySelector(".qty").value) || 0;
+    // 일반 계정은 단가 칸이 없으므로 약품에 등록된 판매단가를 그대로 사용
+    const d0 = drugById(id);
+    const price = role === "admin"
+      ? (Number(tr.querySelector(".price").value) || 0)
+      : (Number(d0?.sellPrice) || 0);
+    if (!id) continue;
+    if (qty <= 0) return toast("수량은 1 이상이어야 합니다.");
+    const d = drugById(id);
+    items.push({
+      drugId: id,
+      name: d?.name || "",
+      spec: d?.spec || "",
+      unit: d?.unit || "",
+      qty,
+      price,
+      buyPrice: Number(d?.buyPrice) || 0,
+      amount: qty * price,
+      cost: qty * (Number(d?.buyPrice) || 0)
+    });
+  }
+  if (!items.length) return toast("약품을 한 개 이상 선택해 주세요.");
+
+  const short = items.filter(it => (Number(drugById(it.drugId)?.stock) || 0) < it.qty);
+  if (short.length) {
+    const ok = await confirmModal(
+      "재고가 부족합니다",
+      short.map(s => `${s.name} (현재고 ${num(drugById(s.drugId)?.stock || 0)}, 투약 ${num(s.qty)})`).join(", ")
+        + " — 그래도 저장하면 재고가 음수가 됩니다.",
+      "그대로 저장");
+    if (!ok) return;
+  }
+
+  const btn = $("#dpSave");
+  btn.disabled = true; btn.textContent = "저장 중…";
+  try {
+    const batch = writeBatch(db);
+    const ref = doc(COL.dispenses);
+    batch.set(ref, {
+      date,
+      patient,
+      phone: $("#dpPhone").value.trim(),
+      pay,
+      card,
+      memo: $("#dpMemo").value.trim(),
+      items,
+      total: items.reduce((s, i) => s + i.amount, 0),
+      totalCost: items.reduce((s, i) => s + i.cost, 0),
+      createdAt: serverTimestamp(),
+      createdBy: currentUser?.email || ""
+    });
+    // 같은 약품이 여러 줄에 있으면 합산해서 한 번만 차감
+    const agg = {};
+    items.forEach(i => { agg[i.drugId] = (agg[i.drugId] || 0) + i.qty; });
+    Object.entries(agg).forEach(([id, q]) =>
+      batch.update(doc(db, "drugs", id), { stock: increment(-q), updatedAt: serverTimestamp() }));
+    await batch.commit();
+
+    toast("판매 내역을 저장했습니다.");
+    $("#dpReset").click();
+    const [rf, rt] = dpRange();
+    if (date >= rf && date <= rt) loadDispenses();
+  } catch (err) {
+    toast("저장 실패: " + (err.code || err.message));
+  } finally {
+    btn.disabled = false; btn.textContent = "저장";
+  }
+});
+
+// 일반 계정은 하루 단위, 관리자는 기간 단위로 조회한다
+function dpRange() {
+  if (role === "admin") return [$("#dpFrom").value, $("#dpTo").value];
+  const d = $("#dpDay").value;
+  return [d, d];
+}
+
+$("#dpToday").addEventListener("click", () => {
+  const t = ymd();
+  $("#dpDay").value = t; $("#dpFrom").value = t; $("#dpTo").value = t;
+  loadDispenses();
+});
+$("#dpSearch").addEventListener("click", loadDispenses);
+$("#dpDay").addEventListener("change", loadDispenses);
+
+async function fetchDispenses(from, to) {
+  const q = query(COL.dispenses, where("date", ">=", from), where("date", "<=", to), orderBy("date", "desc"));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+async function loadDispenses() {
+  const [from, to] = dpRange();
+  if (!from || !to) return;
+  const tb = $("#dpList");
+  tb.innerHTML = `<tr><td colspan="7"><div class="empty">불러오는 중…</div></td></tr>`;
+  try {
+    const rows = await fetchDispenses(from, to);
+    if (!rows.length) {
+      tb.innerHTML = `<tr><td colspan="7"><div class="empty">${role === "admin" ? "해당 기간에" : "이 날짜에"} 판매 내역이 없습니다.</div></td></tr>`;
+      return;
+    }
+    tb.innerHTML = rows.map(r => `
+      <tr>
+        <td>${escapeHtml(r.date)}</td>
+        <td>${escapeHtml(r.patient || r.chartNo || "")}</td>
+        <td>${escapeHtml(r.phone || "")}</td>
+        <td style="white-space:normal">${(r.items || []).map(i =>
+          `${escapeHtml(i.name)} ${num(i.qty)}${escapeHtml(i.unit || "")}`).join(", ")}</td>
+        <td>${escapeHtml(payLabel(r))}</td>
+        <td class="num">${won(r.total)}</td>
+        <td><button class="btn btn-sm btn-danger" data-dpdel="${r.id}">삭제</button></td>
+      </tr>`).join("");
+  } catch (err) {
+    tb.innerHTML = `<tr><td colspan="7"><div class="empty">불러오지 못했습니다: ${escapeHtml(err.code || err.message)}</div></td></tr>`;
+  }
+}
+
+$("#dpList").addEventListener("click", async e => {
+  const b = e.target.closest("[data-dpdel]");
+  if (!b) return;
+  const ok = await confirmModal("판매 내역 삭제", "삭제하면 차감했던 재고가 다시 더해집니다.", "삭제");
+  if (!ok) return;
+  try {
+    const rows = await fetchDispenses(...dpRange());
+    const target = rows.find(r => r.id === b.dataset.dpdel);
+    if (!target) return toast("이미 삭제된 내역입니다.");
+    const batch = writeBatch(db);
+    batch.delete(doc(db, "dispenses", target.id));
+    const agg = {};
+    (target.items || []).forEach(i => { agg[i.drugId] = (agg[i.drugId] || 0) + i.qty; });
+    Object.entries(agg).forEach(([id, q]) => {
+      if (drugById(id)) batch.update(doc(db, "drugs", id), { stock: increment(q), updatedAt: serverTimestamp() });
+    });
+    await batch.commit();
+    toast("삭제했습니다.");
+    loadDispenses();
+  } catch (err) { toast("삭제 실패: " + (err.code || err.message)); }
+});
+
+/* ==========================================================================
+   8) 입고
+   ========================================================================== */
+
+$("#siDrug").addEventListener("change", () => {
+  const d = drugById($("#siDrug").value);
+  if (d) $("#siCost").value = Number(d.buyPrice) || 0;
+});
+
+$("#siSave").addEventListener("click", async () => {
+  const date = $("#siDate").value;
+  const id = $("#siDrug").value;
+  const qty = Number($("#siQty").value) || 0;
+  if (!date) return toast("입고일을 선택해 주세요.");
+  if (!id) return toast("약품을 선택해 주세요.");
+  if (qty <= 0) return toast("수량은 1 이상이어야 합니다.");
+
+  const d = drugById(id);
+  // 일반 계정은 매입단가 칸이 없으므로 약품에 등록된 값을 그대로 사용
+  const cost = role === "admin"
+    ? (Number($("#siCost").value) || 0)
+    : (Number(d?.buyPrice) || 0);
+  const btn = $("#siSave");
+  btn.disabled = true; btn.textContent = "저장 중…";
+  try {
+    const batch = writeBatch(db);
+    batch.set(doc(COL.stockIns), {
+      date, drugId: id, drugName: d?.name || "", unit: d?.unit || "",
+      qty, unitCost: cost, amount: qty * cost,
+      vendor: $("#siVendor").value.trim(),
+      createdAt: serverTimestamp(), createdBy: currentUser?.email || ""
+    });
+    const upd = { stock: increment(qty), updatedAt: serverTimestamp() };
+    if (role === "admin" && cost > 0) upd.buyPrice = cost;
+    batch.update(doc(db, "drugs", id), upd);
+    await batch.commit();
+    toast("입고를 저장했습니다.");
+    $("#siQty").value = 1; $("#siVendor").value = "";
+    loadStockIns();
+  } catch (err) {
+    toast("저장 실패: " + (err.code || err.message));
+  } finally {
+    btn.disabled = false; btn.textContent = "입고 저장";
+  }
+});
+
+$("#siSearch").addEventListener("click", loadStockIns);
+
+async function loadStockIns() {
+  const from = $("#siFrom").value, to = $("#siTo").value;
+  if (!from || !to) return;
+  const tb = $("#siList");
+  tb.innerHTML = `<tr><td colspan="7"><div class="empty">불러오는 중…</div></td></tr>`;
+  try {
+    const snap = await getDocs(query(COL.stockIns,
+      where("date", ">=", from), where("date", "<=", to), orderBy("date", "desc")));
+    const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (!rows.length) {
+      tb.innerHTML = `<tr><td colspan="7"><div class="empty">해당 기간에 입고 내역이 없습니다.</div></td></tr>`;
+      return;
+    }
+    tb.innerHTML = rows.map(r => `
+      <tr>
+        <td>${escapeHtml(r.date)}</td>
+        <td>${escapeHtml(r.drugName || "")}</td>
+        <td class="num">${num(r.qty)}</td>
+        <td class="num staffHide">${won(r.unitCost)}</td>
+        <td class="num staffHide">${won(r.amount)}</td>
+        <td>${escapeHtml(r.vendor || "")}</td>
+        <td><button class="btn btn-sm btn-danger" data-sidel="${r.id}" data-drug="${escapeHtml(r.drugId || "")}" data-qty="${Number(r.qty) || 0}">삭제</button></td>
+      </tr>`).join("");
+  } catch (err) {
+    tb.innerHTML = `<tr><td colspan="7"><div class="empty">불러오지 못했습니다: ${escapeHtml(err.code || err.message)}</div></td></tr>`;
+  }
+}
+
+$("#siList").addEventListener("click", async e => {
+  const b = e.target.closest("[data-sidel]");
+  if (!b) return;
+  const ok = await confirmModal("입고 내역 삭제", "삭제하면 더했던 재고가 다시 차감됩니다.", "삭제");
+  if (!ok) return;
+  try {
+    const batch = writeBatch(db);
+    batch.delete(doc(db, "stockIns", b.dataset.sidel));
+    const id = b.dataset.drug, q = Number(b.dataset.qty) || 0;
+    if (id && drugById(id)) batch.update(doc(db, "drugs", id), { stock: increment(-q), updatedAt: serverTimestamp() });
+    await batch.commit();
+    toast("삭제했습니다.");
+    loadStockIns();
+  } catch (err) { toast("삭제 실패: " + (err.code || err.message)); }
+});
+
+/* ==========================================================================
+   9) 기간별 집계 + 차트
+   ========================================================================== */
+
+let statCache = null;
+
+$("#stSearch").addEventListener("click", runStats);
+$$("[data-preset]").forEach(b => b.addEventListener("click", () => {
+  const p = b.dataset.preset;
+  const now = new Date();
+  if (p === "thisMonth") { $("#stFrom").value = monthStart(now); $("#stTo").value = monthEnd(now); }
+  if (p === "lastMonth") {
+    const m = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    $("#stFrom").value = monthStart(m); $("#stTo").value = monthEnd(m);
+  }
+  if (p === "last30") { $("#stTo").value = ymd(now); $("#stFrom").value = addDays(ymd(now), -29); }
+  runStats();
+}));
+
+async function runStats() {
+  const from = $("#stFrom").value, to = $("#stTo").value;
+  if (!from || !to) return toast("기간을 선택해 주세요.");
+  if (from > to) return toast("시작일이 종료일보다 뒤입니다.");
+
+  $("#stTiles").innerHTML = `<div class="tile"><div class="k">집계 중…</div></div>`;
+  try {
+    const rows = await fetchDispenses(from, to);
+
+    let total = 0, cost = 0, qtyAll = 0;
+    const byDay = {}, byDrug = {}, byPay = {}, byCard = {};
+    rows.forEach(r => {
+      total += Number(r.total) || 0;
+      cost  += Number(r.totalCost) || 0;
+      byDay[r.date] = (byDay[r.date] || 0) + (Number(r.total) || 0);
+
+      const p = r.pay || "미지정";
+      const pe = byPay[p] || (byPay[p] = { name: p, count: 0, amount: 0 });
+      pe.count++; pe.amount += Number(r.total) || 0;
+      if (r.pay === "카드" && r.card) {
+        const ce = byCard[r.card] || (byCard[r.card] = { name: r.card, count: 0, amount: 0 });
+        ce.count++; ce.amount += Number(r.total) || 0;
+      }
+
+      (r.items || []).forEach(i => {
+        qtyAll += Number(i.qty) || 0;
+        const k = i.name || i.drugId;
+        const e = byDrug[k] || (byDrug[k] = { name: k, qty: 0, amount: 0, cost: 0 });
+        e.qty += Number(i.qty) || 0;
+        e.amount += Number(i.amount) || 0;
+        e.cost += Number(i.cost) || 0;
+      });
+    });
+
+    const days = [];
+    for (let d = from; d <= to; d = addDays(d, 1)) days.push({ date: d, value: byDay[d] || 0 });
+    const ranked = Object.values(byDrug).sort((a, b) => b.qty - a.qty);
+
+    statCache = { from, to, rows, total, cost, qtyAll, days, ranked };
+    renderTiles(statCache);
+    renderPay(Object.values(byPay), Object.values(byCard));
+    renderTrend(days);
+    renderRank(ranked);
+  } catch (err) {
+    $("#stTiles").innerHTML = `<div class="tile"><div class="k">집계 실패</div><div class="v" style="font-size:14px">${escapeHtml(err.code || err.message)}</div></div>`;
+  }
+}
+
+function renderTiles(s) {
+  const margin = s.total - s.cost;
+  const rate = s.total ? Math.round((margin / s.total) * 1000) / 10 : 0;
+  $("#stTiles").innerHTML = `
+    <div class="tile"><div class="k">총 약제비</div><div class="v">${won(s.total)}<span class="u">원</span></div></div>
+    <div class="tile"><div class="k">매입 원가</div><div class="v">${won(s.cost)}<span class="u">원</span></div></div>
+    <div class="tile"><div class="k">차액</div><div class="v" style="color:${margin >= 0 ? "#006300" : "#d03b3b"}">${won(margin)}<span class="u">원 (${rate}%)</span></div></div>
+    <div class="tile"><div class="k">판매 건수</div><div class="v">${num(s.rows.length)}<span class="u">건</span></div></div>
+    <div class="tile"><div class="k">총 판매 수량</div><div class="v">${num(s.qtyAll)}</div></div>`;
+}
+
+/* 결제수단별 — 단일 계열 가로 막대 + 직접 라벨 */
+function renderPay(pays, cards) {
+  const order = { "카드": 0, "현금": 1, "계좌이체": 2, "기타": 3, "미지정": 4 };
+  const list = pays.slice().sort((a, b) => (order[a.name] ?? 9) - (order[b.name] ?? 9));
+  const max = Math.max(1, ...list.map(p => p.amount));
+  $("#stPay").innerHTML = list.length
+    ? list.map(p => `
+        <div class="bar-row">
+          <div class="lab"><span class="nm">${escapeHtml(p.name)}</span>
+            <span class="vl">${num(p.count)}건 · ${won(p.amount)}원</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:${(p.amount / max * 100).toFixed(1)}%"></div></div>
+        </div>`).join("")
+    : '<div class="empty">데이터가 없습니다.</div>';
+
+  const cs = cards.slice().sort((a, b) => b.amount - a.amount);
+  $("#stCard").innerHTML = cs.length
+    ? "카드사별 — " + cs.map(c =>
+        `<b style="color:var(--ink)">${escapeHtml(c.name)}</b> ${num(c.count)}건 ${won(c.amount)}원`).join(" · ")
+    : "";
+}
+
+/* 일별 추이 — 단일 계열 세로 막대 (파랑 한 가지, 범례 없음, 호버 툴팁) */
+function renderTrend(days) {
+  const host = $("#trendChart");
+  $("#stTrendHint").textContent = `${days.length}일 · 막대에 마우스를 올리면 값이 보입니다.`;
+
+  if (!days.length) { host.innerHTML = '<div class="empty">데이터가 없습니다.</div>'; return; }
+
+  const W = 900, H = 240, padL = 58, padR = 12, padT = 14, padB = 30;
+  const iw = W - padL - padR, ih = H - padT - padB;
+  const max = Math.max(1, ...days.map(d => d.value));
+  const niceMax = niceCeil(max);
+  const gap = days.length > 60 ? 1 : 2;
+  const bw = Math.max(1, iw / days.length - gap);
+
+  const ticks = [0, .25, .5, .75, 1].map(f => Math.round(niceMax * f));
+  const grid = ticks.map(t => {
+    const y = padT + ih - (t / niceMax) * ih;
+    return `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="#e1e0d9" stroke-width="1"/>
+            <text x="${padL - 8}" y="${y + 4}" text-anchor="end" font-size="11" fill="#898781">${won(t)}</text>`;
+  }).join("");
+
+  const bars = days.map((d, i) => {
+    const x = padL + i * (iw / days.length) + gap / 2;
+    const h = d.value > 0 ? Math.max(2, (d.value / niceMax) * ih) : 0;
+    const y = padT + ih - h;
+    const r = Math.min(4, bw / 2, h);
+    return h === 0 ? "" :
+      `<path d="M${x},${padT + ih} L${x},${y + r} Q${x},${y} ${x + r},${y} L${x + bw - r},${y} Q${x + bw},${y} ${x + bw},${y + r} L${x + bw},${padT + ih} Z"
+         fill="#2a78d6" data-i="${i}"/>`;
+  }).join("");
+
+  const step = Math.max(1, Math.ceil(days.length / 8));
+  const labelIdx = [];
+  for (let i = 0; i < days.length; i += step) labelIdx.push(i);
+  const last = days.length - 1;
+  if (last - labelIdx[labelIdx.length - 1] >= step * 0.6) labelIdx.push(last);
+  const xlabels = labelIdx.map(i =>
+    `<text x="${padL + i * (iw / days.length) + bw / 2}" y="${H - 8}" text-anchor="middle" font-size="11" fill="#898781">${days[i].date.slice(5).replace("-", "/")}</text>`
+  ).join("");
+
+  host.innerHTML = `
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="일별 약제비 추이">
+      ${grid}${bars}
+      <line x1="${padL}" y1="${padT + ih}" x2="${W - padR}" y2="${padT + ih}" stroke="#c3c2b7" stroke-width="1"/>
+      ${xlabels}
+      <rect x="${padL}" y="${padT}" width="${iw}" height="${ih}" fill="transparent" id="trendHit"/>
+    </svg>
+    <div class="tip" id="trendTip"></div>`;
+
+  const svg = host.querySelector("svg");
+  const tip2 = host.querySelector("#trendTip");
+  svg.addEventListener("mousemove", ev => {
+    const r = svg.getBoundingClientRect();
+    const px = (ev.clientX - r.left) / r.width * W;
+    if (px < padL || px > W - padR) { tip2.style.opacity = 0; return; }
+    const i = Math.min(days.length - 1, Math.max(0, Math.floor((px - padL) / (iw / days.length))));
+    const d = days[i];
+    tip2.innerHTML = `${d.date}<br><b>${won(d.value)}원</b>`;
+    tip2.style.left = ((padL + i * (iw / days.length) + bw / 2) / W * r.width) + "px";
+    tip2.style.top = (padT + ih - (d.value / niceMax) * ih) / H * r.height + "px";
+    tip2.style.opacity = 1;
+  });
+  svg.addEventListener("mouseleave", () => { tip2.style.opacity = 0; });
+}
+
+function niceCeil(v) {
+  if (v <= 0) return 1;
+  const mag = Math.pow(10, Math.floor(Math.log10(v)));
+  const n = v / mag;
+  const s = n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10;
+  return s * mag;
+}
+
+/* 약품별 사용 순위 — 단일 계열 가로 막대 + 직접 라벨 */
+function renderRank(ranked) {
+  const top = ranked.slice(0, 10);
+  const max = Math.max(1, ...top.map(r => r.qty));
+  $("#stRank").innerHTML = top.length
+    ? top.map(r => `
+        <div class="bar-row">
+          <div class="lab"><span class="nm">${escapeHtml(r.name)}</span>
+            <span class="vl">${num(r.qty)} · ${won(r.amount)}원</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:${(r.qty / max * 100).toFixed(1)}%"></div></div>
+        </div>`).join("")
+    : '<div class="empty">데이터가 없습니다.</div>';
+
+  $("#stTable").innerHTML = ranked.length
+    ? ranked.map(r => `
+        <tr>
+          <td>${escapeHtml(r.name)}</td>
+          <td class="num">${num(r.qty)}</td>
+          <td class="num">${won(r.amount)}</td>
+          <td class="num">${won(r.cost)}</td>
+          <td class="num" style="color:${r.amount - r.cost >= 0 ? "#006300" : "#d03b3b"}">${won(r.amount - r.cost)}</td>
+        </tr>`).join("")
+    : `<tr><td colspan="5"><div class="empty">해당 기간에 판매 내역이 없습니다.</div></td></tr>`;
+}
+
+$("#stCsv").addEventListener("click", () => {
+  if (!statCache) return toast("먼저 집계를 실행해 주세요.");
+  const lines = [["판매일", "환자명", "전화 뒷4자리", "결제수단", "카드사", "약품명", "규격",
+                  "수량", "단위", "판매단가", "약제비", "매입단가", "매입원가", "메모"]];
+  statCache.rows
+    .slice()
+    .sort((a, b) => (a.date < b.date ? -1 : 1))
+    .forEach(r => (r.items || []).forEach(i =>
+      // 앞자리 0이 엑셀에서 잘리지 않도록 텍스트로 고정
+      lines.push([r.date, r.patient || r.chartNo || "", r.phone ? `="${r.phone}"` : "", r.pay || "", r.card || "",
+                  i.name || "", i.spec || "",
+                  i.qty, i.unit || "", i.price, i.amount, i.buyPrice, i.cost, r.memo || ""])));
+  const csv = lines.map(row => row.map(c => {
+    const s = String(c ?? "");
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }).join(",")).join("\r\n");
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `약제비_${statCache.from}_${statCache.to}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+/* 탭 진입 시 최초 1회 자동 로드 */
+let loadedOnce = { stockin: false, stats: false };
+$("#tabs").addEventListener("click", e => {
+  const t = e.target.closest("button[data-tab]")?.dataset.tab;
+  if (t === "stockin" && !loadedOnce.stockin) { loadedOnce.stockin = true; loadStockIns(); }
+  if (t === "stats" && !loadedOnce.stats) { loadedOnce.stats = true; runStats(); }
+});
+</script>
+</body>
+</html>
