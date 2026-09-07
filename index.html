@@ -183,7 +183,7 @@
       <button class="btn btn-primary" style="width:100%" type="submit" id="loginBtn">접속</button>
     </div>
     <div class="msg" id="loginMsg"></div>
-    <div style="margin-top:14px; text-align:center; font-size:11px; color:var(--ink-muted)">버전 2026-09-07e</div>
+    <div style="margin-top:14px; text-align:center; font-size:11px; color:var(--ink-muted)">버전 2026-09-07f</div>
   </form>
 </div>
 
@@ -193,7 +193,7 @@
     <div class="top-in">
       <span class="brand">원내처방 약제비 관리</span>
       <span class="who" id="whoami"></span>
-      <span class="who">v2026-09-07e</span>
+      <span class="who">v2026-09-07f</span>
       <button class="btn btn-sm" id="logoutBtn">로그아웃</button>
     </div>
     <nav class="tabs" id="tabs">
@@ -234,14 +234,7 @@
           </div>
           <div style="flex:0 1 150px" id="dpCardWrap">
             <label class="fl" for="dpCard">카드사</label>
-            <select class="inp" id="dpCard">
-              <option value="">— 선택 —</option>
-              <option>신한</option><option>삼성</option><option>현대</option>
-              <option>KB국민</option><option>롯데</option><option>하나</option>
-              <option>우리</option><option>BC</option><option>NH농협</option>
-              <option>씨티</option><option>카카오뱅크</option><option>토스뱅크</option>
-              <option>기타</option>
-            </select>
+            <select class="inp" id="dpCard"></select>
           </div>
           <div style="flex:1 1 160px">
             <label class="fl" for="dpMemo">메모 <span style="font-weight:400">(선택)</span></label>
@@ -501,6 +494,12 @@ const firebaseConfig = {
 
 // Firebase Authentication > 이메일/비밀번호 로 미리 만들어 둔 계정 2개.
 // 사용자는 비밀번호만 입력하고, 아래 이메일은 코드가 자동으로 사용합니다.
+// 카드사 목록 — 여기만 고치면 판매 입력과 수정 화면에 함께 반영됩니다
+const CARDS = [
+  "신한", "삼성", "현대", "KB국민", "롯데", "하나", "우리", "BC",
+  "NH농협", "씨티", "카카오뱅크", "토스뱅크", "MG새마을금고", "IBK기업은행", "기타"
+];
+
 const ACCOUNTS = {
   staff: "staff@abijou-guro.com",   // 일반
   admin: "abijou_guro@nate.com"     // 관리자
@@ -983,6 +982,14 @@ function recalcDispense() {
   return total;
 }
 
+function cardOptions(selected) {
+  // 목록에 없는 옛 기록의 카드사도 사라지지 않도록 앞에 붙여 준다
+  const list = selected && !CARDS.includes(selected) ? [selected, ...CARDS] : CARDS;
+  return '<option value="">— 선택 —</option>' + list.map(c =>
+    `<option${c === selected ? " selected" : ""}>${escapeHtml(c)}</option>`).join("");
+}
+$("#dpCard").innerHTML = cardOptions();
+
 function syncPayFields() {
   $("#dpCardWrap").style.display = $("#dpPay").value === "카드" ? "" : "none";
   if ($("#dpPay").value !== "카드") $("#dpCard").value = "";
@@ -1170,8 +1177,6 @@ async function openDispenseModal(id) {
   } catch (err) { return toast("불러오지 못했습니다: " + (err.code || err.message)); }
   if (!r) return toast("이미 삭제된 내역입니다.");
 
-  const cards = ["신한", "삼성", "현대", "KB국민", "롯데", "하나", "우리", "BC",
-                 "NH농협", "씨티", "카카오뱅크", "토스뱅크", "기타"];
   const root = $("#modalRoot");
   root.innerHTML = `
     <div class="backdrop">
@@ -1199,10 +1204,7 @@ async function openDispenseModal(id) {
           </div>
           <div style="flex:0 1 130px" id="edCardWrap">
             <label class="fl">카드사</label>
-            <select class="inp" id="edCard">
-              <option value="">— 선택 —</option>
-              ${cards.map(c => `<option${r.card === c ? " selected" : ""}>${c}</option>`).join("")}
-            </select>
+            <select class="inp" id="edCard">${cardOptions(r.card)}</select>
           </div>
           <div style="flex:1 1 150px">
             <label class="fl">메모</label>
