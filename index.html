@@ -149,6 +149,20 @@
   .modal{background:var(--surface); border-radius:14px; padding:22px; width:100%; max-width:520px; box-shadow:var(--shadow); max-height:90vh; overflow:auto}
   .modal h3{margin:0 0 16px; font-size:16px}
 
+  .pickbox{
+    border:1px solid var(--line); border-radius:8px; background:#fff; padding:8px;
+    max-height:190px; overflow-y:auto;
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:2px;
+  }
+  .pickbox label{
+    display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:6px;
+    font-size:13px; cursor:pointer; min-width:0;
+  }
+  .pickbox label:hover{background:var(--plane)}
+  .pickbox label span{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .pickbox input{flex:0 0 auto; width:15px; height:15px; accent-color:var(--brand); margin:0}
+  .pickbox .none{grid-column:1/-1; color:var(--ink-muted); text-align:center; padding:14px; font-size:13px}
+
   .toast{
     position:fixed; left:50%; bottom:26px; transform:translateX(-50%);
     background:#0b0b0b; color:#fff; padding:11px 18px; border-radius:9px; font-size:13px;
@@ -183,7 +197,7 @@
       <button class="btn btn-primary" style="width:100%" type="submit" id="loginBtn">접속</button>
     </div>
     <div class="msg" id="loginMsg"></div>
-    <div style="margin-top:14px; text-align:center; font-size:11px; color:var(--ink-muted)">버전 2026-09-07f</div>
+    <div style="margin-top:14px; text-align:center; font-size:11px; color:var(--ink-muted)">버전 2026-09-07g</div>
   </form>
 </div>
 
@@ -193,7 +207,7 @@
     <div class="top-in">
       <span class="brand">원내처방 약제비 관리</span>
       <span class="who" id="whoami"></span>
-      <span class="who">v2026-09-07f</span>
+      <span class="who">v2026-09-07g</span>
       <button class="btn btn-sm" id="logoutBtn">로그아웃</button>
     </div>
     <nav class="tabs" id="tabs">
@@ -418,7 +432,7 @@
     <section id="tab-stats" class="hide">
       <div class="card">
         <h2>기간별 약제비 집계</h2>
-        <p class="hint">투약 내역을 기준으로 계산합니다.</p>
+        <p class="hint" id="stScopeHint">판매 내역을 기준으로 계산합니다.</p>
         <div class="row">
           <div style="flex:0 1 150px">
             <label class="fl" for="stFrom">시작일</label>
@@ -435,6 +449,21 @@
           <div style="flex:1"></div>
           <div style="flex:0 0 auto"><button class="btn" id="stCsv">CSV 내보내기</button></div>
         </div>
+      </div>
+
+      <div class="card">
+        <h2>약품 선택</h2>
+        <p class="hint">고른 약품만 집계합니다. 아무것도 고르지 않으면 전체가 집계됩니다.</p>
+        <div class="row" style="margin-bottom:10px">
+          <div style="flex:0 1 200px">
+            <input class="inp" id="stDrugSearch" placeholder="약품명 검색">
+          </div>
+          <div style="flex:0 0 auto"><button class="btn btn-sm" id="stSelAll">전체 선택</button></div>
+          <div style="flex:0 0 auto"><button class="btn btn-sm" id="stSelNone">전체 해제</button></div>
+          <div style="flex:1"></div>
+          <div style="flex:0 0 auto"><span id="stSelCount" style="font-size:12.5px; color:var(--ink-2)"></span></div>
+        </div>
+        <div class="pickbox" id="stDrugPick"></div>
       </div>
 
       <div class="tiles" id="stTiles"></div>
@@ -716,6 +745,7 @@ function boot() {
   unsubDrugs = onSnapshot(query(COL.drugs, orderBy("name")), snap => {
     drugs = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort(compareDrugs);
     renderDrugs();
+    renderDrugPicker();
     refreshDrugSelects();
   }, err => toast("약품 목록을 불러오지 못했습니다: " + err.code));
 
@@ -1083,6 +1113,7 @@ $("#dpSave").addEventListener("click", async () => {
       batch.update(doc(db, "drugs", id), { stock: increment(-q), updatedAt: serverTimestamp() }));
     await batch.commit();
 
+    statRaw = { from: null, to: null, rows: [] };
     toast("판매 내역을 저장했습니다.");
     $("#dpReset").click();
     const [rf, rt] = dpRange();
@@ -1333,6 +1364,7 @@ async function openDispenseModal(id) {
       });
       await batch.commit();
       root.innerHTML = "";
+      statRaw = { from: null, to: null, rows: [] };
       toast("수정했습니다.");
       loadDispenses();
     } catch (err) {
@@ -1364,6 +1396,7 @@ $("#dpList").addEventListener("click", async e => {
       if (drugById(id)) batch.update(doc(db, "drugs", id), { stock: increment(q), updatedAt: serverTimestamp() });
     });
     await batch.commit();
+    statRaw = { from: null, to: null, rows: [] };
     toast("삭제했습니다.");
     loadDispenses();
   } catch (err) { toast("삭제 실패: " + (err.code || err.message)); }
@@ -1472,8 +1505,47 @@ $("#siList").addEventListener("click", async e => {
    ========================================================================== */
 
 let statCache = null;
+let statRaw = { from: null, to: null, rows: [] };   // 조회한 원본을 담아 두고 필터만 다시 계산
+const statPick = new Set();                          // 비어 있으면 전체
 
-$("#stSearch").addEventListener("click", runStats);
+function renderDrugPicker() {
+  const kw = $("#stDrugSearch").value.trim().toLowerCase();
+  const list = drugs.filter(d => !kw || (d.name || "").toLowerCase().includes(kw));
+  const box = $("#stDrugPick");
+  box.innerHTML = list.length
+    ? list.map(d => `
+        <label>
+          <input type="checkbox" value="${d.id}"${statPick.has(d.id) ? " checked" : ""}>
+          <span>${escapeHtml(drugLabel(d))}</span>
+        </label>`).join("")
+    : `<div class="none">${drugs.length ? "검색 결과가 없습니다." : "등록된 약품이 없습니다."}</div>`;
+  $("#stSelCount").textContent = statPick.size ? `${statPick.size}개 선택됨` : "전체 집계";
+}
+
+$("#stDrugSearch").addEventListener("input", renderDrugPicker);
+
+$("#stDrugPick").addEventListener("change", e => {
+  const cb = e.target.closest("input[type=checkbox]");
+  if (!cb) return;
+  if (cb.checked) statPick.add(cb.value); else statPick.delete(cb.value);
+  $("#stSelCount").textContent = statPick.size ? `${statPick.size}개 선택됨` : "전체 집계";
+  if (statRaw.rows.length || statCache) runStats();   // 이미 조회했다면 바로 다시 계산
+});
+
+$("#stSelAll").addEventListener("click", () => {
+  const kw = $("#stDrugSearch").value.trim().toLowerCase();
+  drugs.filter(d => !kw || (d.name || "").toLowerCase().includes(kw)).forEach(d => statPick.add(d.id));
+  renderDrugPicker();
+  if (statRaw.rows.length || statCache) runStats();
+});
+
+$("#stSelNone").addEventListener("click", () => {
+  statPick.clear();
+  renderDrugPicker();
+  if (statRaw.rows.length || statCache) runStats();
+});
+
+$("#stSearch").addEventListener("click", () => runStats(true));
 $$("[data-preset]").forEach(b => b.addEventListener("click", () => {
   const p = b.dataset.preset;
   const now = new Date();
@@ -1486,52 +1558,74 @@ $$("[data-preset]").forEach(b => b.addEventListener("click", () => {
   runStats();
 }));
 
-async function runStats() {
+async function runStats(force) {
   const from = $("#stFrom").value, to = $("#stTo").value;
   if (!from || !to) return toast("기간을 선택해 주세요.");
   if (from > to) return toast("시작일이 종료일보다 뒤입니다.");
 
-  $("#stTiles").innerHTML = `<div class="tile"><div class="k">집계 중…</div></div>`;
   try {
-    const rows = await fetchDispenses(from, to);
-
-    let total = 0, cost = 0, qtyAll = 0;
-    const byDay = {}, byDrug = {}, byPay = {}, byCard = {};
-    rows.forEach(r => {
-      total += Number(r.total) || 0;
-      cost  += Number(r.totalCost) || 0;
-      byDay[r.date] = (byDay[r.date] || 0) + (Number(r.total) || 0);
-
-      const p = r.pay || "미지정";
-      const pe = byPay[p] || (byPay[p] = { name: p, count: 0, amount: 0 });
-      pe.count++; pe.amount += Number(r.total) || 0;
-      if (r.pay === "카드" && r.card) {
-        const ce = byCard[r.card] || (byCard[r.card] = { name: r.card, count: 0, amount: 0 });
-        ce.count++; ce.amount += Number(r.total) || 0;
-      }
-
-      (r.items || []).forEach(i => {
-        qtyAll += Number(i.qty) || 0;
-        const k = drugLabel(i) || i.drugId;
-        const e = byDrug[k] || (byDrug[k] = { name: k, qty: 0, amount: 0, cost: 0 });
-        e.qty += Number(i.qty) || 0;
-        e.amount += Number(i.amount) || 0;
-        e.cost += Number(i.cost) || 0;
-      });
-    });
-
-    const days = [];
-    for (let d = from; d <= to; d = addDays(d, 1)) days.push({ date: d, value: byDay[d] || 0 });
-    const ranked = Object.values(byDrug).sort((a, b) => b.qty - a.qty);
-
-    statCache = { from, to, rows, total, cost, qtyAll, days, ranked };
-    renderTiles(statCache);
-    renderPay(Object.values(byPay), Object.values(byCard));
-    renderTrend(days);
-    renderRank(ranked);
+    if (force || statRaw.from !== from || statRaw.to !== to) {
+      $("#stTiles").innerHTML = `<div class="tile"><div class="k">집계 중…</div></div>`;
+      statRaw = { from, to, rows: await fetchDispenses(from, to) };
+    }
+    computeStats(from, to, statRaw.rows);
   } catch (err) {
     $("#stTiles").innerHTML = `<div class="tile"><div class="k">집계 실패</div><div class="v" style="font-size:14px">${escapeHtml(err.code || err.message)}</div></div>`;
   }
+}
+
+function computeStats(from, to, raw) {
+  // 선택한 약품이 있으면 그 약품 줄만 골라 합산한다.
+  // 한 건에 여러 약품이 섞여 있어도 고른 약품의 금액만 잡힌다.
+  const picked = i => statPick.size === 0 || statPick.has(i.drugId);
+
+  let total = 0, cost = 0, qtyAll = 0;
+  const byDay = {}, byDrug = {}, byPay = {}, byCard = {};
+  const rows = [];
+
+  raw.forEach(r => {
+    const items = (r.items || []).filter(picked);
+    if (!items.length) return;
+    const amt = items.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+    const cst = items.reduce((s, i) => s + (Number(i.cost) || 0), 0);
+    rows.push({ ...r, items, total: amt, totalCost: cst });
+
+    total += amt;
+    cost += cst;
+    byDay[r.date] = (byDay[r.date] || 0) + amt;
+
+    const p = r.pay || "미지정";
+    const pe = byPay[p] || (byPay[p] = { name: p, count: 0, amount: 0 });
+    pe.count++; pe.amount += amt;
+    if (r.pay === "카드" && r.card) {
+      const ce = byCard[r.card] || (byCard[r.card] = { name: r.card, count: 0, amount: 0 });
+      ce.count++; ce.amount += amt;
+    }
+
+    items.forEach(i => {
+      qtyAll += Number(i.qty) || 0;
+      const k = drugLabel(i) || i.drugId;
+      const e = byDrug[k] || (byDrug[k] = { name: k, qty: 0, amount: 0, cost: 0 });
+      e.qty += Number(i.qty) || 0;
+      e.amount += Number(i.amount) || 0;
+      e.cost += Number(i.cost) || 0;
+    });
+  });
+
+  const days = [];
+  for (let d = from; d <= to; d = addDays(d, 1)) days.push({ date: d, value: byDay[d] || 0 });
+  const ranked = Object.values(byDrug).sort((a, b) => b.qty - a.qty);
+
+  const names = [...statPick].map(id => drugLabel(drugById(id) || {})).filter(Boolean);
+  $("#stScopeHint").textContent = names.length
+    ? `선택한 약품만 집계 — ${names.length > 4 ? names.slice(0, 4).join(", ") + ` 외 ${names.length - 4}개` : names.join(", ")}`
+    : "판매 내역을 기준으로 계산합니다. 전체 약품이 집계됩니다.";
+
+  statCache = { from, to, rows, total, cost, qtyAll, days, ranked };
+  renderTiles(statCache);
+  renderPay(Object.values(byPay), Object.values(byCard));
+  renderTrend(days);
+  renderRank(ranked);
 }
 
 function renderTiles(s) {
