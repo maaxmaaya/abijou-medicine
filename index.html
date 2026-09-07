@@ -183,7 +183,7 @@
       <button class="btn btn-primary" style="width:100%" type="submit" id="loginBtn">접속</button>
     </div>
     <div class="msg" id="loginMsg"></div>
-    <div style="margin-top:14px; text-align:center; font-size:11px; color:var(--ink-muted)">버전 2026-09-07c</div>
+    <div style="margin-top:14px; text-align:center; font-size:11px; color:var(--ink-muted)">버전 2026-09-07e</div>
   </form>
 </div>
 
@@ -193,7 +193,7 @@
     <div class="top-in">
       <span class="brand">원내처방 약제비 관리</span>
       <span class="who" id="whoami"></span>
-      <span class="who">v2026-09-07c</span>
+      <span class="who">v2026-09-07e</span>
       <button class="btn btn-sm" id="logoutBtn">로그아웃</button>
     </div>
     <nav class="tabs" id="tabs">
@@ -715,7 +715,7 @@ function boot() {
 
   if (unsubDrugs) unsubDrugs();
   unsubDrugs = onSnapshot(query(COL.drugs, orderBy("name")), snap => {
-    drugs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    drugs = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort(compareDrugs);
     renderDrugs();
     refreshDrugSelects();
   }, err => toast("약품 목록을 불러오지 못했습니다: " + err.code));
@@ -727,9 +727,38 @@ function boot() {
 
 function drugById(id) { return drugs.find(d => d.id === id); }
 
+// 약품명 가나다순, 이름이 같으면 규격을 숫자로 읽어 작은 것부터.
+// 규격에 숫자가 없으면(예: "주사액") 숫자 규격들 뒤에 글자순으로 붙인다.
+function specNum(s) {
+  const m = String(s ?? "").match(/-?\d+(?:\.\d+)?/);
+  return m ? parseFloat(m[0]) : Number.POSITIVE_INFINITY;
+}
+/* 재고 공유 — 직원용처럼 같은 물건을 다른 가격으로 파는 약품은
+   stockRef 에 기준 약품 id 를 두고, 재고 증감을 모두 기준 약품에 적용한다. */
+function stockTarget(id) {
+  const d = drugById(id);
+  return (d && d.stockRef && drugById(d.stockRef)) ? d.stockRef : id;
+}
+function stockOf(d) {
+  if (!d) return 0;
+  if (d.stockRef) {
+    const base = drugById(d.stockRef);
+    if (base) return Number(base.stock) || 0;
+  }
+  return Number(d.stock) || 0;
+}
+
+function compareDrugs(a, b) {
+  const byName = (a.name || "").localeCompare(b.name || "", "ko");
+  if (byName) return byName;
+  const d = specNum(a.spec) - specNum(b.spec);
+  if (d) return d;
+  return (a.spec || "").localeCompare(b.spec || "", "ko");
+}
+
 function drugOptions(selectedId) {
   return '<option value="">— 약품 선택 —</option>' + drugs.map(d =>
-    `<option value="${d.id}"${d.id === selectedId ? " selected" : ""}>${escapeHtml(d.name)}${d.spec ? " · " + escapeHtml(d.spec) : ""}</option>`
+    `<option value="${d.id}"${d.id === selectedId ? " selected" : ""}>${escapeHtml(drugLabel(d))}</option>`
   ).join("");
 }
 
@@ -752,12 +781,16 @@ function renderDrugs() {
     tb.innerHTML = `<tr><td colspan="8"><div class="empty">${drugs.length ? "검색 결과가 없습니다." : "등록된 약품이 없습니다. 관리자로 접속해 약품을 먼저 등록해 주세요."}</div></td></tr>`;
   } else {
     tb.innerHTML = list.map(d => {
-      const stock = Number(d.stock) || 0;
+      const stock = stockOf(d);
       const safety = Number(d.safety) || 0;
       const flag = stock <= 0 ? '<span class="pill zero">소진</span>'
                  : (safety > 0 && stock <= safety) ? '<span class="pill low">부족</span>' : "";
+      const base = d.stockRef ? drugById(d.stockRef) : null;
+      const shareTag = base
+        ? `<div style="font-size:11px; color:var(--ink-muted); margin-top:2px">${escapeHtml(drugLabel(base))} 재고 공유</div>`
+        : "";
       return `<tr>
-        <td>${escapeHtml(d.name)}</td>
+        <td>${escapeHtml(d.name)}${shareTag}</td>
         <td>${escapeHtml(d.spec || "")}</td>
         <td>${escapeHtml(d.unit || "")}</td>
         <td class="num staffHide">${won(d.buyPrice)}</td>
@@ -772,8 +805,10 @@ function renderDrugs() {
     }).join("");
   }
 
+  // 재고를 공유하는 약품은 기준 약품에서 한 번만 알린다
   const low = drugs.filter(d => {
-    const s = Number(d.stock) || 0, sf = Number(d.safety) || 0;
+    if (d.stockRef && drugById(d.stockRef)) return false;
+    const s = stockOf(d), sf = Number(d.safety) || 0;
     return s <= 0 || (sf > 0 && s <= sf);
   });
   const note = $("#lowStockNote");
@@ -830,6 +865,18 @@ function openDrugModal(d) {
           <div><label class="fl">안전재고</label><input class="inp" type="number" name="safety" min="0" step="1" style="text-align:right" value="${Number(d?.safety) || 0}"></div>
         </div>
         <div style="margin-top:10px">
+          <label class="fl">재고 공유 <span style="font-weight:400">(선택)</span></label>
+          <select class="inp" name="stockRef" id="dmStockRef">
+            <option value="">이 약품의 재고를 따로 관리</option>
+            ${drugs.filter(x => x.id !== d?.id && !x.stockRef).map(x =>
+              `<option value="${x.id}"${d?.stockRef === x.id ? " selected" : ""}>${escapeHtml(drugLabel(x))}</option>`).join("")}
+          </select>
+          <div style="font-size:12px; color:var(--ink-2); margin-top:6px">
+            직원용처럼 같은 물건을 다른 가격으로 파는 경우, 기준이 되는 약품을 고르세요.
+            이 약품을 팔거나 입고하면 재고는 고른 약품에서 늘고 줄어듭니다.
+          </div>
+        </div>
+        <div style="margin-top:10px">
           <label class="fl">메모</label>
           <input class="inp" name="memo" value="${escapeHtml(d?.memo || "")}">
         </div>
@@ -843,6 +890,17 @@ function openDrugModal(d) {
 
   root.querySelector("[data-close]").onclick = () => (root.innerHTML = "");
 
+  // 재고를 공유하면 이 약품의 현재고 칸은 쓰지 않는다
+  const stockInput = $("#drugForm [name=stock]");
+  const syncStockRef = () => {
+    const shared = !!$("#dmStockRef").value;
+    stockInput.disabled = shared;
+    stockInput.style.opacity = shared ? ".45" : "";
+    stockInput.title = shared ? "재고를 공유하므로 기준 약품의 재고를 사용합니다." : "";
+  };
+  syncStockRef();
+  $("#dmStockRef").addEventListener("change", syncStockRef);
+
   $("#drugForm").onsubmit = async ev => {
     ev.preventDefault();
     const f = new FormData(ev.target);
@@ -854,9 +912,11 @@ function openDrugModal(d) {
       sellPrice: Number(f.get("sellPrice")) || 0,
       stock: Number(f.get("stock")) || 0,
       safety: Number(f.get("safety")) || 0,
+      stockRef: f.get("stockRef") || "",
       memo: (f.get("memo") || "").trim(),
       updatedAt: serverTimestamp()
     };
+    if (payload.stockRef) payload.stock = 0;   // 재고는 기준 약품이 갖는다
     if (!payload.name) return;
     try {
       if (isNew) {
@@ -978,11 +1038,16 @@ $("#dpSave").addEventListener("click", async () => {
   }
   if (!items.length) return toast("약품을 한 개 이상 선택해 주세요.");
 
-  const short = items.filter(it => (Number(drugById(it.drugId)?.stock) || 0) < it.qty);
+  // 재고를 공유하는 약품은 기준 약품 기준으로 합산해서 확인한다
+  const need = {};
+  items.forEach(i => { const t = stockTarget(i.drugId); need[t] = (need[t] || 0) + i.qty; });
+
+  const short = Object.entries(need).filter(([t, q]) => stockOf(drugById(t)) < q);
   if (short.length) {
     const ok = await confirmModal(
       "재고가 부족합니다",
-      short.map(s => `${s.name} (현재고 ${num(drugById(s.drugId)?.stock || 0)}, 투약 ${num(s.qty)})`).join(", ")
+      short.map(([t, q]) =>
+        `${drugLabel(drugById(t) || {})} (현재고 ${num(stockOf(drugById(t)))}, 판매 ${num(q)})`).join(", ")
         + " — 그래도 저장하면 재고가 음수가 됩니다.",
       "그대로 저장");
     if (!ok) return;
@@ -1006,10 +1071,8 @@ $("#dpSave").addEventListener("click", async () => {
       createdAt: serverTimestamp(),
       createdBy: currentUser?.email || ""
     });
-    // 같은 약품이 여러 줄에 있으면 합산해서 한 번만 차감
-    const agg = {};
-    items.forEach(i => { agg[i.drugId] = (agg[i.drugId] || 0) + i.qty; });
-    Object.entries(agg).forEach(([id, q]) =>
+    // 같은 약품(또는 재고를 공유하는 약품)은 합산해서 한 번만 차감
+    Object.entries(need).forEach(([id, q]) =>
       batch.update(doc(db, "drugs", id), { stock: increment(-q), updatedAt: serverTimestamp() }));
     await batch.commit();
 
@@ -1253,8 +1316,14 @@ async function openDispenseModal(id) {
       });
       // 수량이 바뀐 만큼만 재고를 되돌리거나 더 뺀다
       const before = {}, after = {};
-      (r.items || []).forEach(i => { before[i.drugId] = (before[i.drugId] || 0) + (Number(i.qty) || 0); });
-      next.forEach(i => { after[i.drugId] = (after[i.drugId] || 0) + i.qty; });
+      (r.items || []).forEach(i => {
+        const t = stockTarget(i.drugId);
+        before[t] = (before[t] || 0) + (Number(i.qty) || 0);
+      });
+      next.forEach(i => {
+        const t = stockTarget(i.drugId);
+        after[t] = (after[t] || 0) + i.qty;
+      });
       new Set([...Object.keys(before), ...Object.keys(after)]).forEach(did => {
         const delta = (before[did] || 0) - (after[did] || 0);
         if (delta !== 0 && drugById(did))
@@ -1285,7 +1354,10 @@ $("#dpList").addEventListener("click", async e => {
     const batch = writeBatch(db);
     batch.delete(doc(db, "dispenses", target.id));
     const agg = {};
-    (target.items || []).forEach(i => { agg[i.drugId] = (agg[i.drugId] || 0) + i.qty; });
+    (target.items || []).forEach(i => {
+      const t = stockTarget(i.drugId);
+      agg[t] = (agg[t] || 0) + (Number(i.qty) || 0);
+    });
     Object.entries(agg).forEach(([id, q]) => {
       if (drugById(id)) batch.update(doc(db, "drugs", id), { stock: increment(q), updatedAt: serverTimestamp() });
     });
@@ -1327,9 +1399,14 @@ $("#siSave").addEventListener("click", async () => {
       vendor: $("#siVendor").value.trim(),
       createdAt: serverTimestamp(), createdBy: currentUser?.email || ""
     });
-    const upd = { stock: increment(qty), updatedAt: serverTimestamp() };
-    if (role === "admin" && cost > 0) upd.buyPrice = cost;
-    batch.update(doc(db, "drugs", id), upd);
+    // 재고는 기준 약품에, 매입단가는 이 약품 자체에 반영한다
+    const target = stockTarget(id);
+    const updates = {};
+    updates[target] = { stock: increment(qty), updatedAt: serverTimestamp() };
+    if (role === "admin" && cost > 0) {
+      updates[id] = Object.assign({ updatedAt: serverTimestamp() }, updates[id], { buyPrice: cost });
+    }
+    Object.entries(updates).forEach(([k, v]) => batch.update(doc(db, "drugs", k), v));
     await batch.commit();
     toast("입고를 저장했습니다.");
     $("#siQty").value = 1; $("#siVendor").value = "";
@@ -1380,7 +1457,8 @@ $("#siList").addEventListener("click", async e => {
     const batch = writeBatch(db);
     batch.delete(doc(db, "stockIns", b.dataset.sidel));
     const id = b.dataset.drug, q = Number(b.dataset.qty) || 0;
-    if (id && drugById(id)) batch.update(doc(db, "drugs", id), { stock: increment(-q), updatedAt: serverTimestamp() });
+    const t = id ? stockTarget(id) : "";
+    if (t && drugById(t)) batch.update(doc(db, "drugs", t), { stock: increment(-q), updatedAt: serverTimestamp() });
     await batch.commit();
     toast("삭제했습니다.");
     loadStockIns();
